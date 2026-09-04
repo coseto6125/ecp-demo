@@ -1,0 +1,6 @@
+# The api tests write executable stub scripts and spawn them. In parallel,
+# a fork in one test can inherit the write fd of a script another test is
+# still creating, and executing that script then fails with ETXTBSY. One
+# thread removes the race; the whole suite still runs in a few seconds.
+[env]
+RUST_TEST_THREADS = "1"

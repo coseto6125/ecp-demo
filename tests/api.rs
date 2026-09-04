@@ -32,7 +32,7 @@ struct Harness {
 #[derive(Default, Clone, Copy)]
 struct Stubs {
     /// GitHub API answer: `Some(size_kb)` → 200 with that size; `None` → 403.
-    /// A repo whose owner is `big` always reports 5000 KB.
+    /// A repo whose owner is `big` always reports 50000 KB (with history).
     api_size_kb: Option<u64>,
     api_404: bool,
     /// Bytes the fake clone writes into the checkout.
@@ -119,7 +119,7 @@ esac"#,
     let api = match (stubs.api_404, stubs.api_size_kb) {
         (true, _) => "printf '{}\\n404'".to_string(),
         (false, Some(kb)) => format!(
-            r#"case "$*" in *repos/big/*) printf '{{"size":5000}}\n200' ;; *) printf '{{"size":{kb}}}\n200' ;; esac"#
+            r#"case "$*" in *repos/big/*) printf '{{"size":50000}}\n200' ;; *) printf '{{"size":{kb}}}\n200' ;; esac"#
         ),
         (false, None) => "printf '{}\\n403'".to_string(),
     };
@@ -404,7 +404,7 @@ async fn add_rejects_a_repo_the_api_reports_above_the_ceiling_before_cloning() {
         entry["error"]
             .as_str()
             .unwrap()
-            .contains("GitHub reports 4 MB"),
+            .contains("GitHub reports 48 MB with history"),
         "{entry}"
     );
     assert!(

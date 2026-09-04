@@ -80,6 +80,10 @@ pub struct StoreConfig {
     pub github_token: Option<String>,
 }
 
+/// How far above the checkout ceiling the history-inclusive GitHub `size`
+/// may go before the clone is refused outright.
+const API_SIZE_SLACK: u64 = 8;
+
 pub struct RepoStore {
     cfg: StoreConfig,
     entries: Mutex<Vec<RepoEntry>>,
@@ -343,9 +347,12 @@ impl RepoStore {
         }
         let info: Value = serde_json::from_str(body).unwrap_or(Value::Null);
         let size_kb = info.get("size").and_then(Value::as_u64).unwrap_or(0);
-        if size_kb > self.cfg.max_repo_kb {
+        // The API's `size` counts the whole history; a depth-1 checkout is
+        // often far smaller. Refuse here only what cannot possibly fit, and
+        // let the post-clone measurement enforce the real ceiling.
+        if size_kb > self.cfg.max_repo_kb * API_SIZE_SLACK {
             return Err(format!(
-                "GitHub reports {} MB; this demo instance indexes repositories up to {} MB",
+                "GitHub reports {} MB with history; this demo instance indexes checkouts up to {} MB",
                 size_kb / 1024,
                 self.cfg.max_repo_kb / 1024
             ));
