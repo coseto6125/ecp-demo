@@ -1,0 +1,1114 @@
+[
+  {
+    "name": "ecp_inspect",
+    "subcommand": "inspect",
+    "description": "Show a symbol's full context: signature, body, edges, callers, overrides, 1-hop impact",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "file_path": {
+          "description": "Substring filter applied to the target file path of incoming/outgoing edges. Case-sensitive substring match (not glob)",
+          "type": "string"
+        },
+        "format": {
+          "description": "Output format",
+          "type": "string"
+        },
+        "include_tests": {
+          "description": "Include edges whose target lives in a test file. Defaults to false",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "Comma-separated list of node kinds (lowercase, e.g. `function,method`) to keep on the *target* side of incoming/outgoing edges",
+          "type": "string"
+        },
+        "name": {
+          "description": "Target symbol name (equivalent to `--name` flag)",
+          "type": "string"
+        },
+        "name_flag": {
+          "description": "Named alias for the positional NAME argument — kept for parity with old MCP / wrapper habits",
+          "type": "string"
+        },
+        "relation_types": {
+          "description": "Comma-separated list of relation types (lowercase, e.g. `calls,imports`)",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository path",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "include_tests"
+    ],
+    "positional_args": [
+      "name"
+    ],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_find",
+    "subcommand": "find",
+    "description": "Locate symbols by exact name (default), substring (`--mode fuzzy`), or BM25 ranking (`--mode bm25`)",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "description": "Return all matches instead of the single top-ranked one. Affects `exact` and `fuzzy` modes; `bm25` always returns top-K buckets",
+          "type": "boolean"
+        },
+        "batch": {
+          "description": "Read patterns from stdin (`bm25` mode only — one per line, lines starting with `#` or empty are skipped). Engines are loaded once outside the per-query loop so mmap setup + rkyv access are amortised across queries. Each query is emitted as a separate block prefixed by `=== pattern: <pattern> ===`",
+          "type": "boolean"
+        },
+        "file": {
+          "description": "Disambiguate when name has multiple matches: substring on file path. Same matching rule as `ecp impact --file`",
+          "type": "string"
+        },
+        "format": {
+          "description": "Output format: text (default) | json | toon",
+          "type": "string"
+        },
+        "fuzzy": {
+          "description": "Shorthand for `--mode fuzzy`. Ignored when `--mode` is supplied explicitly with a non-default value",
+          "type": "boolean"
+        },
+        "include_tests": {
+          "description": "Include hits from test files in `fuzzy` mode (skipped by default). `exact` mode automatically searches tests without needing this flag. `bm25` mode bucketises into a separate `tests` array and is unaffected by this flag",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "Filter by node kinds (csv: function,method,class,...)",
+          "type": "string"
+        },
+        "mode": {
+          "description": "Lookup mode: `exact` (default), `fuzzy`, or `bm25`",
+          "enum": [
+            "exact",
+            "fuzzy",
+            "bm25"
+          ],
+          "type": "string"
+        },
+        "pattern": {
+          "description": "Pattern: symbol name (or name fragment in `fuzzy` / `bm25` mode). Required unless `--batch` is set (`bm25` mode only — patterns then come from stdin)",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository selector (path | name | @all | csv mix). Defaults to cwd. `@<group>` is rejected at the top level — use `ecp group find` instead",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "all",
+      "batch",
+      "fuzzy",
+      "include_tests"
+    ],
+    "positional_args": [
+      "pattern"
+    ],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_impact",
+    "subcommand": "impact",
+    "description": "Symbol blast radius — affected callers (counts + call sites)",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "description": "Git ref — compute blast radius across all symbols changed between this baseline and HEAD. Mutually exclusive with positional <name>",
+          "type": "string"
+        },
+        "batch": {
+          "description": "Read target symbol names from stdin (one per line; `#` and blank lines skipped). The graph is loaded once and N symbols are resolved sequentially — amortises mmap + process spawn across queries. Each result is prefixed by `=== target: <name> ===` so callers can split the stream unambiguously. Flags like --direction / --depth / --include-tests apply uniformly to all targets",
+          "type": "boolean"
+        },
+        "confidence_threshold": {
+          "description": "Informational confidence gate — promotes heuristic edges when T4-7/T5-33 emit per-edge tiers. Currently controls the --explain-confidence report",
+          "type": "number"
+        },
+        "depth": {
+          "description": "Maximum BFS depth",
+          "type": "integer"
+        },
+        "direction": {
+          "description": "Direction of traversal",
+          "enum": [
+            "up",
+            "down",
+            "both"
+          ],
+          "type": "string"
+        },
+        "explain_confidence": {
+          "description": "Emit explain_confidence block with threshold + per-tier filtered counts",
+          "type": "boolean"
+        },
+        "file": {
+          "description": "Disambiguate when name has multiple matches: substring on file path. `--file_path` / `--file-path` stay as aliases for back-compat",
+          "type": "string"
+        },
+        "format": {
+          "description": "Output format (mostly internal — agent doesn't set this)",
+          "type": "string"
+        },
+        "high_trust_only": {
+          "description": "Default OFF — recall-first: traverse every edge regardless of confidence (cross-crate refs at 0.7 are still real callers, just less certain). Pass `--high-trust-only=true` to restrict to confidence ≥ 0.8 edges for a noise-light view; when filtering kicks in, the output reports `hidden_edges` so missed coverage stays visible",
+          "type": "boolean"
+        },
+        "include_tests": {
+          "description": "Include test files in traversal",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "Disambiguate by kind (function | method | class | route | ...)",
+          "type": "string"
+        },
+        "literal": {
+          "description": "List sites of a path-shaped string literal by exact value. Mutually exclusive with --target/--baseline/<name>. Returns JSON with each site's file, line, enclosing fn, and sink classification (`sink:read` / `sink:write` / `sink:open-read` / `sink:join` / etc). Designed for LLM split-brain queries: `ecp impact --literal session_meta.json` answers \"where is this file read or written?\" without writing cypher",
+          "type": "string"
+        },
+        "literal_coherence": {
+          "description": "Auto-detect likely path-literal split-brain pairs across all PathLiteral nodes. Conservative: same extension, similar basename, nearby directories, and read-only vs write-only sink separation",
+          "type": "boolean"
+        },
+        "min_confidence": {
+          "description": "Override the high-trust threshold with a custom value (0.0–1.0). If set, takes precedence over --high-trust-only",
+          "type": "number"
+        },
+        "name": {
+          "description": "Target symbol name (mutually exclusive with --baseline). Equivalent to the `--target` named form below. Optional when `--batch` is set or when a non-positional mode flag (`--target`, `--baseline`, `--literal`, `--literal-coherence`) supplies the query",
+          "type": "string"
+        },
+        "no_heuristic": {
+          "description": "Suppress heuristic callers (MirrorsField, EventTopicMirror) from the blast radius. Default: heuristic callers ARE shown, in a separate `heuristic_callers` bucket tagged `requires_verification`. Pass this flag for a pure-deterministic blast radius",
+          "type": "boolean"
+        },
+        "relation_types": {
+          "description": "Comma-separated relation types to follow (calls, extends, ...)",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository selector",
+          "type": "string"
+        },
+        "target": {
+          "description": "Named alias for the positional NAME argument — kept for parity with old MCP / wrapper habits",
+          "type": "string"
+        },
+        "test_coverage": {
+          "description": "Coverage gap analysis: for each touched symbol, classify by test-caller presence (uncovered / partial / covered). Uses FunctionMeta.is_test flag from per-language extraction. Outputs uncovered symbols first to support LLM PR review (\"X 改了沒測試\"). Implies --include-tests during traversal so test callers are reachable from the walker",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "batch",
+      "explain_confidence",
+      "include_tests",
+      "literal_coherence",
+      "no_heuristic",
+      "test_coverage"
+    ],
+    "positional_args": [
+      "name"
+    ],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_rename",
+    "subcommand": "rename",
+    "description": "AST-aware multi-file rename",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "description": "Plan + verify only — do not mutate any file. Prints the diff summary to stdout",
+          "type": "boolean"
+        },
+        "markdown": {
+          "description": "Also rename word-boundary occurrences in .md / .markdown / .rst / .txt documentation files. Default OFF",
+          "type": "boolean"
+        },
+        "new_name": {
+          "description": "The new name to apply (equivalent to `--new-name` flag)",
+          "type": "string"
+        },
+        "new_name_flag": {
+          "description": "Named alias for the positional NEW_NAME argument",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository root. Defaults to current dir",
+          "type": "string"
+        },
+        "show_heuristic_mirrors": {
+          "description": "Expand the heuristic mirror list in the output. When unset, only the count is shown. Tier shows the `unresolved` sentinel until T4-7 populates real tier/check values",
+          "type": "boolean"
+        },
+        "symbol": {
+          "description": "The symbol name to rename (equivalent to `--symbol` flag)",
+          "type": "string"
+        },
+        "symbol_flag": {
+          "description": "Named alias for the positional SYMBOL argument",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "dry_run",
+      "markdown",
+      "show_heuristic_mirrors"
+    ],
+    "positional_args": [
+      "symbol",
+      "new_name"
+    ],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_pattern",
+    "subcommand": "pattern",
+    "description": "Syntax-pattern search over source files — the statement shapes the graph does not hold. `--callers-of` scopes the scan to one symbol's callers",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "callers_of": {
+          "description": "Restrict the scan to files that call this symbol. Accepts the same `Owner.method` qualification as `ecp rename`",
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "lang": {
+          "description": "Restrict the scan to one file extension, without the dot (`py`, `ts`). A pattern that fails to compile for it is then an error",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Cap on reported matches. 0 means no cap",
+          "type": "integer"
+        },
+        "pattern": {
+          "description": "ast-grep pattern, e.g. `requests.get($URL)`. `$NAME` captures one node, `$$$NAME` captures a run of them",
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern"
+      ],
+      "type": "object"
+    },
+    "flag_args": [],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_cypher",
+    "subcommand": "cypher",
+    "description": "Cypher query escape hatch",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "description": "Output format. Omit for the LLM-tuned default; explicit `--format toon|json|text` for the neutral / round-trippable / human paths",
+          "type": "string"
+        },
+        "query": {
+          "description": "Named alias for the positional QUERY argument",
+          "type": "string"
+        },
+        "query_positional": {
+          "description": "The Cypher query string. Supports a read-only subset of openCypher:",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository to query. Cypher operates on a single graph (single-repo only). If --repo resolves to multiple repos, an error is returned",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [],
+    "positional_args": [
+      "query_positional"
+    ],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_summary",
+    "subcommand": "summary",
+    "description": "Registry + repo health. Default: scoped to the cwd repo when indexed; registry overview otherwise. Use `--repo @all` for the registry overview explicitly",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "detailed": {
+          "description": "Verbose per-section breakdown (include branch rows, etc.)",
+          "type": "boolean"
+        },
+        "format": {
+          "description": "Output format. Omit for the LLM-tuned default (toon-encoded, lossy confidence rounding + compact timestamps). `--format toon` is the neutral toon encoding of the full payload; `--format json` is the full-fidelity JSON; `--format text` is the human-friendly fallback",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository selector (path | name | @all | csv mix). If omitted and cwd is an indexed repo: scoped per-repo health. If omitted and cwd is not indexed: registry overview. Use `--repo @all` to force the registry overview regardless of cwd",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "detailed"
+    ],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_routes",
+    "subcommand": "routes",
+    "description": "List HTTP routes; with path, show handler + caller chain",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "depth": {
+          "description": "Max depth for upstream caller traversal (only applies when <path> is set)",
+          "type": "integer"
+        },
+        "format": {
+          "description": "Output format (toon / json / text)",
+          "type": "string"
+        },
+        "include_tests": {
+          "description": "Include routes declared inside test files (`tests/`, `test/`, `*_test.*`, `*.spec.*`, etc.). Default: off — most agent queries want production routes, not test fixtures. When set, the output gains a `test_results` array listing the test-only routes alongside the regular `results`. Test classification reuses `File.category = FileCategory::Test` set at index time (`ecp-analyzer/src/resolution/builder.rs:32`)",
+          "type": "boolean"
+        },
+        "method": {
+          "description": "Filter by HTTP method (GET / POST / PATCH / DELETE / ...)",
+          "type": "string"
+        },
+        "path": {
+          "description": "If given, show handler + caller chain for this route path. If omitted, list all routes",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository selector",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "include_tests"
+    ],
+    "positional_args": [
+      "path"
+    ],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_contracts",
+    "subcommand": "contracts",
+    "description": "Cross-repo API contracts inventory (routes / queue / RPC)",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "description": "Output format: toon (default) | json",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Contract kind to scan: routes / queue / rpc / all",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository selector (path | name | @group | @all | csv). Requires ≥2 repos to be meaningful",
+          "type": "string"
+        },
+        "unmatched_only": {
+          "description": "Only show contracts without a paired consumer/producer",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "unmatched_only"
+    ],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_diff",
+    "subcommand": "diff",
+    "description": "Edge-level resolver delta — binding tier-degradation (silent break), route / contract changes",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "description": "Git ref to compare against: branch / tag / commit SHA / HEAD~N / PR/<n>. Required unless `--baseline-graph` is supplied (A-mode snapshot diff)",
+          "type": "string"
+        },
+        "baseline_graph": {
+          "description": "A-mode: path to baseline `graph.bin` (skip git checkout + re-index). When set, requires `--current-graph` and restricts sections to those that read directly from graph.bin (routes / contracts / symbols)",
+          "type": "string"
+        },
+        "current_graph": {
+          "description": "A-mode: path to current `graph.bin`. Required when `--baseline-graph` is supplied",
+          "type": "string"
+        },
+        "format": {
+          "description": "Output format. Omit for the LLM-tuned default; pass `--format text|json|toon` for the alternative renderings",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository root path (defaults to current directory)",
+          "type": "string"
+        },
+        "section": {
+          "description": "Comma-separated section(s) to diff: bindings, routes, contracts, symbols, or all",
+          "enum": [
+            "bindings",
+            "routes",
+            "contracts",
+            "symbols",
+            "all"
+          ],
+          "type": "string"
+        },
+        "verbose": {
+          "description": "List every change (text format only). Default truncates to top-10 per section",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "section"
+      ],
+      "type": "object"
+    },
+    "flag_args": [
+      "verbose"
+    ],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_uninstall",
+    "subcommand": "uninstall",
+    "description": "Remove all ecp host integrations and optionally wipe the index cache",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "description": "Only uninstall integration for one coding agent (claude, codex, gemini). Omit to uninstall all detected agents (and remove the binary itself)",
+          "enum": [
+            "claude",
+            "codex",
+            "gemini"
+          ],
+          "type": "string"
+        },
+        "dry_run": {
+          "description": "List what would be removed without actually deleting anything",
+          "type": "boolean"
+        },
+        "keep_cache": {
+          "description": "Skip deletion of ~/.ecp (index cache + registry)",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "dry_run",
+      "keep_cache"
+    ],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_shape-check",
+    "subcommand": "shape-check",
+    "description": "Detect drift between HTTP consumer access patterns and Route response shapes",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "description": "Output format: text (default) | json | toon",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository root path (defaults to current directory)",
+          "type": "string"
+        },
+        "route": {
+          "description": "Filter: only report drift for routes whose path matches this substring. When None (default), all routes with extracted shape are checked",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_tool-map",
+    "subcommand": "tool-map",
+    "description": "Enumerate calls to external HTTP/DB/Redis/queue clients via per-file import-binding analysis",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "description": "Filter to a specific category. Comma-separated: `http`, `db`, `redis`, `queue`. Empty = all",
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_review",
+    "subcommand": "review",
+    "description": "LLM-workflow audit aggregator over changed files, high-confidence signals only",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "description": "Explicit file list (comma-separated). Overrides --since",
+          "type": "string"
+        },
+        "format": {
+          "description": "Output format: toon (default) | json",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository root path (defaults to current directory)",
+          "type": "string"
+        },
+        "since": {
+          "description": "Git ref to diff against. Defaults to working-tree changes (HEAD)",
+          "type": "string"
+        },
+        "verdicts": {
+          "description": "Emit provable verdicts derived from `ecp diff --section all` instead of the per-file aggregate findings. Requires `--since <ref>` (the baseline). Output shape: `{baseline, current, verdicts, elapsed_ms}`",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "verdicts"
+    ],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_heuristics",
+    "subcommand": "heuristics",
+    "description": "Heuristic detectors: `saga` (Saga/Outbox), `schema-bindings` (MirrorsField), `event-mirrors` (EventTopicMirror)",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_path",
+    "subcommand": "path",
+    "description": "Shortest route between two symbols: the ordered chain plus the edge that makes each hop",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "depth": {
+          "description": "Maximum hops to search",
+          "type": "integer"
+        },
+        "direction": {
+          "description": "Which way to walk from `from`. `down` follows callees (A calls … calls B), `up` follows callers, `both` ignores edge direction",
+          "enum": [
+            "up",
+            "down",
+            "both"
+          ],
+          "type": "string"
+        },
+        "format": {
+          "description": "Output format (toon / json / text)",
+          "type": "string"
+        },
+        "from": {
+          "description": "Start symbol",
+          "type": "string"
+        },
+        "from_file": {
+          "description": "Disambiguate `<FROM>` when the name has several definitions: substring on the file path",
+          "type": "string"
+        },
+        "include_heuristic": {
+          "description": "Allow heuristic edges (MirrorsField, EventTopicMirror) as steps. Each one is tagged `requiresVerification` in the output",
+          "type": "boolean"
+        },
+        "include_tests": {
+          "description": "Include test files in the route. Off by default, so a production path is not routed through a test helper that happens to call both ends",
+          "type": "boolean"
+        },
+        "min_confidence": {
+          "description": "Drop edges below this confidence (0.0–1.0). Default 0.0 is recall-first, matching `ecp impact`",
+          "type": "number"
+        },
+        "relation_types": {
+          "description": "Comma-separated relation types to follow (calls, extends, ...). Default: every non-containment relation",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository selector",
+          "type": "string"
+        },
+        "to": {
+          "description": "Destination symbol",
+          "type": "string"
+        },
+        "to_file": {
+          "description": "Disambiguate `<TO>` the same way",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "flag_args": [
+      "include_heuristic",
+      "include_tests"
+    ],
+    "positional_args": [
+      "from",
+      "to"
+    ],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_processes",
+    "subcommand": "processes",
+    "description": "List detected Process (execution-flow) nodes, or `processes trace <pattern>` for step sequence",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "description": "Return all processes, disabling the default min-signal filter. Without this flag, short intra-community chains (step_count < 7) are suppressed because they carry near-zero architectural signal",
+          "type": "boolean"
+        },
+        "community": {
+          "description": "Filter the list view to a single community ID",
+          "type": "integer"
+        },
+        "format": {
+          "description": "Output format (toon / json / text)",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Cap on listed processes (default 50)",
+          "type": "integer"
+        },
+        "repo": {
+          "description": "Repository selector",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "all"
+    ],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_usage",
+    "subcommand": "usage",
+    "description": "Usage dashboard over CLI + MCP telemetry — counts, p50/p99 latency, error rate",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "description": "Show the full per-subcommand table (no truncation)",
+          "type": "boolean"
+        },
+        "clear": {
+          "description": "Delete the telemetry logs — both `cli-calls.jsonl` and MCP `calls.jsonl`, since a dashboard that still counts half its history is not cleared. Honors -p to scope to the current repo; otherwise clears every repo",
+          "type": "boolean"
+        },
+        "failures": {
+          "description": "Show recent failing commands with messages instead of the dashboard",
+          "type": "boolean"
+        },
+        "format": {
+          "description": "Output format: text (default) or json",
+          "type": "string"
+        },
+        "no_color": {
+          "description": "Force color off (also honored: NO_COLOR env, non-TTY stdout)",
+          "type": "boolean"
+        },
+        "project": {
+          "description": "Scope to the current repository only (default: all repos)",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "Filter which telemetry files feed the dashboard: cli, mcp, or all (default)",
+          "enum": [
+            "cli",
+            "mcp",
+            "all"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "flag_args": [
+      "all",
+      "clear",
+      "failures",
+      "no_color",
+      "project"
+    ],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": null
+  },
+  {
+    "name": "ecp_peers",
+    "subcommand": "peers",
+    "description": "[multi-agent peer-sync only — single-session has no peers] Inspect / talk to other ecp watch sessions on this repo. Pick `subcmd`; see each arg's [tag] for which subcmd uses it.",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "description": "[say] Message body.",
+          "type": "string"
+        },
+        "clear": {
+          "description": "[inbox] Discard everything in the inbox, including entries the 4KB hook payload never showed. Nothing is discarded automatically, so this is the only way to drop queued content.",
+          "type": "boolean"
+        },
+        "depth": {
+          "description": "[plan] Max impact traversal depth per target (default 5).",
+          "type": "integer"
+        },
+        "direction": {
+          "description": "[log] Filter: 'in' or 'out'. [plan] Impact direction: upstream|downstream|both (default both).",
+          "type": "string"
+        },
+        "format": {
+          "description": "[status] Output format. `json` returns an array with session_id, agent_name, pid, last_touched, base_sha, watcher (alive|dead|not-started), watcher_pid. [plan] also honored.",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "type": "string"
+        },
+        "include_tests": {
+          "description": "[plan] Count test-only symbols as collisions (default false).",
+          "type": "boolean"
+        },
+        "limit": {
+          "description": "[log / inbox] Maximum entries to return (default 50).",
+          "type": "integer"
+        },
+        "msg_id": {
+          "description": "[thread] msg_id returned by say or seen in log.",
+          "type": "string"
+        },
+        "name": {
+          "description": "[name] Agent name to assign to this session (shown in status / payloads, targetable by say).",
+          "type": "string"
+        },
+        "pairs": {
+          "description": "[status] Lead overview: which alive sessions share a dirty FILE (HARD), pairwise, instead of the per-session list.",
+          "type": "boolean"
+        },
+        "peer": {
+          "description": "[diff] Peer session ID or agent name (from subcmd=status). [log] Filter messages to/from this peer.",
+          "type": "string"
+        },
+        "reply": {
+          "description": "[say] msg_id this message is replying to.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Path to the repo root (optional; defaults to cwd).",
+          "type": "string"
+        },
+        "since": {
+          "description": "[log] RFC3339 timestamp — only show messages after this.",
+          "type": "string"
+        },
+        "subcmd": {
+          "description": "Which peer operation to run. Each subcmd uses a disjoint subset of the args below.",
+          "enum": [
+            "status",
+            "diff",
+            "log",
+            "say",
+            "inbox",
+            "thread",
+            "name",
+            "plan"
+          ],
+          "type": "string"
+        },
+        "symbol": {
+          "description": "[diff] If set, only show dirty entries touching this symbol name.",
+          "type": "string"
+        },
+        "targets": {
+          "description": "[plan] Comma-separated symbols a lead intends to split across agents; reports blast-radius overlaps + disjoint work packages.",
+          "type": "string"
+        },
+        "to": {
+          "description": "[say] Target peer session ID or agent name. Omit to broadcast.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subcmd"
+      ],
+      "type": "object"
+    },
+    "flag_args": [
+      "clear",
+      "include_tests",
+      "pairs"
+    ],
+    "positional_args": [
+      "peer",
+      "symbol",
+      "body",
+      "msg_id",
+      "name"
+    ],
+    "prefix_args": [],
+    "subcmd_arg": "subcmd"
+  },
+  {
+    "name": "ecp_group",
+    "subcommand": "group",
+    "description": "Multi-repo group operations: extract contracts, query cross-repo impact, find / batch-find across all members. Pick `subcmd`; see each arg's [tag] for which subcmd uses it. Groups are managed via `ecp admin group add/remove`.",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_stale": {
+          "description": "[sync] Don't bail when per-repo index is stale.",
+          "type": "boolean"
+        },
+        "batch": {
+          "description": "[find] Read patterns from stdin (one per line, `#` for comments). The active `merge` mode is re-applied per pattern.",
+          "type": "boolean"
+        },
+        "cross_depth": {
+          "description": "[impact] Cross-repo hop depth (clamped to 1 in first wave).",
+          "type": "integer"
+        },
+        "direction": {
+          "description": "[impact] Traversal direction (callers vs callees). Default upstream.",
+          "enum": [
+            "upstream",
+            "downstream"
+          ],
+          "type": "string"
+        },
+        "exact_only": {
+          "description": "[sync] Skip BM25 stage; exact match only.",
+          "type": "boolean"
+        },
+        "include_tests": {
+          "description": "[impact] Include test files in local traversal.",
+          "type": "boolean"
+        },
+        "json": {
+          "description": "[all] Emit JSON instead of text/TOON.",
+          "type": "boolean"
+        },
+        "limit": {
+          "description": "[find] Top-K results — requires `merge=rrf`. Default 5.",
+          "type": "integer"
+        },
+        "max_depth": {
+          "description": "[impact] Local-impact max graph traversal depth.",
+          "type": "integer"
+        },
+        "merge": {
+          "description": "[find] Result assembly: `none` = per-repo bucketed concat (default); `rrf` = Reciprocal Rank Fusion → unified top-K.",
+          "enum": [
+            "none",
+            "rrf"
+          ],
+          "type": "string"
+        },
+        "min_confidence": {
+          "description": "[impact] Minimum cross-link confidence to surface.",
+          "type": "number"
+        },
+        "name": {
+          "description": "[all] Group name (must exist in registry; add members via `ecp admin group add <repo> <group>`).",
+          "type": "string"
+        },
+        "pattern": {
+          "description": "[find] BM25 symbol pattern (name or fragment). Required unless `batch` is true.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "[impact] Member name within the group (dir_name or alias). [contracts] Filter by repo name.",
+          "type": "string"
+        },
+        "subcmd": {
+          "description": "Which group operation to run. Each subcmd uses a disjoint subset of the args below.",
+          "enum": [
+            "sync",
+            "status",
+            "contracts",
+            "impact",
+            "find",
+            "summary"
+          ],
+          "type": "string"
+        },
+        "target": {
+          "description": "[impact] Symbol name (function / method / file) to analyse.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "description": "[impact] Local-impact wall-clock budget in ms.",
+          "type": "integer"
+        },
+        "type": {
+          "description": "[contracts] Filter by contract type: http|grpc|thrift|topic|lib|include|custom.",
+          "type": "string"
+        },
+        "unmatched": {
+          "description": "[contracts] Show only unmatched contracts.",
+          "type": "boolean"
+        },
+        "verbose": {
+          "description": "[sync] Show per-cross-link detail.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "subcmd",
+        "name"
+      ],
+      "type": "object"
+    },
+    "flag_args": [
+      "allow_stale",
+      "batch",
+      "exact_only",
+      "include_tests",
+      "json",
+      "unmatched",
+      "verbose"
+    ],
+    "positional_args": [
+      "name",
+      "pattern"
+    ],
+    "prefix_args": [],
+    "subcmd_arg": "subcmd"
+  },
+  {
+    "name": "ecp_schema",
+    "subcommand": "schema",
+    "description": "Read-only schema inventory: per-language BlindSpot emitter coverage (`blindspots`), every RelType edge label with LLM-utility tier (`reltypes`), every NodeKind variant with the distinction that keeps it from being folded into a sibling (`node-kinds`), and the rkyv graph.bin format version + bump history (`graph-version`). Pick `subcmd`.",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "description": "[all] Output format. `json` (default) is structured; `text` is a human-readable table.",
+          "enum": [
+            "json",
+            "text"
+          ],
+          "type": "string"
+        },
+        "subcmd": {
+          "description": "Which schema inventory to emit. All four are graph-free (no .ecp/ load required).",
+          "enum": [
+            "blindspots",
+            "reltypes",
+            "node-kinds",
+            "graph-version"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "subcmd"
+      ],
+      "type": "object"
+    },
+    "flag_args": [],
+    "positional_args": [],
+    "prefix_args": [],
+    "subcmd_arg": "subcmd"
+  }
+]
