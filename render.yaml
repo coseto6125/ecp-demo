@@ -19,17 +19,19 @@ services:
       - key: PORT
         value: 8080
       # Free instances get 0.1 CPU and 512 MB: one ecp at a time, generous
-      # query timeout, small repositories only, few of them kept.
+      # query timeout. The checkout ceiling is 512 MB, but indexing needs
+      # roughly 2–3× the checkout in RAM, so on this plan anything much
+      # above ~50 MB is killed by the host; the page reports that as such.
       - key: ECP_DEMO_CONCURRENCY
         value: 1
       - key: ECP_DEMO_TIMEOUT_SECS
         value: 20
       - key: ECP_DEMO_MAX_REPO_KB
-        value: 30720
+        value: 524288
       - key: ECP_DEMO_MAX_REPOS
-        value: 4
+        value: 2
       - key: ECP_DEMO_INDEX_TIMEOUT_SECS
-        value: 600
+        value: 900
       # Raises the GitHub API quota for the size precheck; a fine-grained
       # token with no scopes is enough. Set it in the dashboard.
       - key: GITHUB_TOKEN

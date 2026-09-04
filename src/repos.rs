@@ -435,7 +435,20 @@ fn prune_failed(entries: &mut Vec<RepoEntry>, keep: usize) {
 async fn run(cmd: Command, timeout: Duration) -> Result<std::process::Output, String> {
     match run_with_timeout(cmd, timeout).await {
         Ok(Some(out)) if out.status.success() => Ok(out),
-        Ok(Some(out)) => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
+        // No exit code means a signal: on a small instance that is the
+        // host's OOM killer, which leaves no stderr to quote.
+        Ok(Some(out)) if out.status.code().is_none() => Err(
+            "killed by the host, most likely out of memory: this instance has too little RAM for a repository this size"
+                .to_string(),
+        ),
+        Ok(Some(out)) => {
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            Err(if stderr.is_empty() {
+                format!("exit {}", out.status.code().unwrap_or(-1))
+            } else {
+                stderr
+            })
+        }
         Ok(None) => Err(format!("killed after {}s", timeout.as_secs())),
         Err(e) => Err(format!("spawn: {e}")),
     }

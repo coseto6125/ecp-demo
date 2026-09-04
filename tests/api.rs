@@ -39,6 +39,8 @@ struct Stubs {
     checkout_bytes: usize,
     /// Seconds the fake `ecp admin index` sleeps.
     index_delay_secs: u32,
+    /// The fake `ecp admin index` dies by SIGKILL, as the OOM killer would do.
+    index_killed: bool,
 }
 
 struct Limits {
@@ -91,7 +93,7 @@ case "$1" in
   admin)
     case "$2" in
       mcp) cat "{TOOLS_FIXTURE}" ;;
-      index) sleep {delay}; [ -e .ecp ] && echo "index saw .ecp" >> "{log_s}" ;;
+      index) {kill}sleep {delay}; [ -e .ecp ] && echo "index saw .ecp" >> "{log_s}" ;;
     esac
     exit 0 ;;
   summary) echo '{{"summary":{{"per_repo":[{{"metrics":{{"nodes":3}}}}]}}}}' ;;
@@ -101,7 +103,12 @@ case "$1" in
     echo '{{"found":true}}' ;;
   *) echo '{{}}' ;;
 esac"#,
-            delay = stubs.index_delay_secs
+            delay = stubs.index_delay_secs,
+            kill = if stubs.index_killed {
+                "kill -9 $$; "
+            } else {
+                ""
+            },
         ),
     );
     let git = script(
@@ -455,6 +462,31 @@ async fn add_reports_a_missing_or_private_repo() {
     assert!(
         entry["error"].as_str().unwrap().contains("not found"),
         "{entry}"
+    );
+}
+
+#[tokio::test]
+async fn an_index_killed_by_the_host_is_reported_as_out_of_memory() {
+    let h = harness(
+        Stubs {
+            index_killed: true,
+            ..ok_stubs()
+        },
+        Limits::default(),
+    );
+    h.add("octo/huge").await;
+    let entry = h.settled("octo/huge").await;
+    assert_eq!(entry["status"], "failed");
+    assert!(
+        entry["error"]
+            .as_str()
+            .unwrap()
+            .contains("killed by the host, most likely out of memory"),
+        "{entry}"
+    );
+    assert!(
+        !h.checkout("octo", "huge").exists(),
+        "the checkout is cleaned up"
     );
 }
 

@@ -17,7 +17,7 @@ async function boot() {
   state.meta = await res.json();
   $('version').textContent = `v${state.meta.version}`;
   const l = state.meta.limits;
-  $('limits').textContent = `Repositories up to ${l.max_repo_mb} MB · ${l.max_repos} kept at a time · queries stop after ${l.timeout_secs} s`;
+  $('limits').textContent = `Checkout up to ${l.max_repo_mb} MB after a depth-1 clone · ${l.max_repos} repositories kept, least used evicted · indexing gives up after ${Math.round(l.index_timeout_secs / 60)} min · queries stop after ${l.timeout_secs} s`;
   renderTools();
   await refreshRepos();
   const hash = location.hash.slice(1);
@@ -128,11 +128,46 @@ function syncHash() {
   if (state.tool) history.replaceState(null, '', `#${state.repo ?? ''}@${state.tool.subcommand}`);
 }
 
+// Starting values that make the first click useful: structured output so it
+// renders highlighted, the mode most visitors mean, and the direction a
+// refactor asks about. Free-text fields get a hint, never a value.
+const DEFAULTS = {
+  find: { mode: 'fuzzy', all: true },
+  impact: { direction: 'upstream' },
+  path: { direction: 'both' },
+  inspect: { include_tests: false },
+};
+const HINTS = {
+  pattern: 'symbol name or fragment, e.g. handler',
+  name: 'symbol name, e.g. createUser',
+  target: 'symbol whose callers you want, e.g. getDB',
+  from: 'start symbol',
+  to: 'end symbol',
+  query: 'MATCH (f:Function) RETURN f.name, f.filePath, f.line LIMIT 20',
+  file: 'substring of a path, e.g. src/routes',
+};
+
 function renderFields(tool) {
   const props = tool.schema.properties ?? {};
   const required = new Set(tool.schema.required ?? []);
   const order = [...tool.positional_args.filter((p) => p in props), ...Object.keys(props).filter((k) => !tool.positional_args.includes(k))];
   $('fields').replaceChildren(...order.map((key) => fieldFor(key, props[key], required.has(key))));
+  applyDefaults(tool, props);
+}
+
+function applyDefaults(tool, props) {
+  const values = { ...(DEFAULTS[tool.subcommand] ?? {}) };
+  if ('format' in props && !('format' in values)) values.format = 'json';
+  for (const [key, prop] of Object.entries(props)) {
+    if (!(key in values) && prop.default !== undefined && prop.default !== null) values[key] = prop.default;
+  }
+  for (const el of $('form').elements) {
+    if (!el.name) continue;
+    const v = values[el.name];
+    if (el.type === 'checkbox') el.checked = v === true;
+    else if (el.tagName === 'SELECT') el.value = v != null && [...el.options].some((o) => o.value === String(v)) ? String(v) : '';
+    else el.value = v != null && typeof v !== 'boolean' ? String(v) : '';
+  }
 }
 
 function fieldFor(key, prop, required) {
@@ -164,6 +199,7 @@ function fieldFor(key, prop, required) {
   input.id = id;
   input.name = key;
   if (required) input.required = true;
+  if (HINTS[key] && 'placeholder' in input) input.placeholder = HINTS[key];
   const help = document.createElement('div');
   help.className = 'help';
   help.textContent = prop.description ?? '';

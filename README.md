@@ -44,7 +44,7 @@ Public endpoint, anonymous callers, so:
 | `ECP_DEMO_RATE_PER_MIN` | `60` | queries + list polls per address |
 | `ECP_DEMO_ADD_RATE_PER_HOUR` | `10` | repositories added per address |
 | `ECP_DEMO_TRUSTED_HOPS` | `1` | `x-forwarded-for` hops appended by trusted proxies (0 = use the socket peer) |
-| `ECP_DEMO_MAX_REPO_KB` | `51200` | repository size ceiling |
+| `ECP_DEMO_MAX_REPO_KB` | `524288` | checkout size ceiling after the depth-1 clone (indexing needs roughly 2–3× the checkout in RAM; on a 512 MB instance, ~50 MB is the practical limit) |
 | `ECP_DEMO_MAX_REPOS` | `6` | checkouts kept before LRU eviction |
 | `ECP_DEMO_QUEUE_LIMIT` | `3` | builds queued at once |
 | `ECP_DEMO_CLONE_TIMEOUT_SECS` / `ECP_DEMO_INDEX_TIMEOUT_SECS` | `120` / `300` | build stage timeouts |

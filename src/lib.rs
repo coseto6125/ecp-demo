@@ -61,7 +61,7 @@ impl Config {
             add_rate_per_hour: env_or("ECP_DEMO_ADD_RATE_PER_HOUR", 10)?,
             concurrency: env_or("ECP_DEMO_CONCURRENCY", 2)?,
             trusted_hops: env_or("ECP_DEMO_TRUSTED_HOPS", 1)?,
-            max_repo_kb: env_or("ECP_DEMO_MAX_REPO_KB", 50 * 1024)?,
+            max_repo_kb: env_or("ECP_DEMO_MAX_REPO_KB", 512 * 1024)?,
             max_repos: env_or("ECP_DEMO_MAX_REPOS", 6)?,
             queue_limit: env_or("ECP_DEMO_QUEUE_LIMIT", 3)?,
             clone_timeout: Duration::from_secs(env_or("ECP_DEMO_CLONE_TIMEOUT_SECS", 120)?),
